@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>胜率指挥官 · 帮 AlphaGo 想下一步</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{background:#FFF9EF;color:#33261A;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+body{min-height:100vh}
+#app{max-width:680px;margin:0 auto;padding:16px 14px 40px}
+.hidden{display:none !important}
+.kicker{font-size:13px;color:#E8703A;letter-spacing:2px;font-weight:700}
+h1{font-size:30px;line-height:1.3;margin:8px 0 6px}
+.sub{font-size:16px;color:#8A7A66;line-height:1.7}
+.btn{display:block;width:100%;border:none;border-radius:16px;padding:16px;font-size:18px;font-weight:700;cursor:pointer;transition:transform .08s;box-shadow:0 4px 0 rgba(51,38,26,.15)}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(51,38,26,.15)}
+.btn-orange{background:#E8703A;color:#fff}
+.btn-green{background:#3F7A5A;color:#fff}
+.hero{background:#F6EBD8;border:2px solid #EAD9BE;border-radius:20px;padding:22px 18px;margin:14px 0;text-align:center}
+.hero .gal{font-size:64px;line-height:1.2}
+.rule{display:flex;gap:10px;align-items:flex-start;background:#fff;border:2px solid #EAD9BE;border-radius:14px;padding:12px 14px;margin:10px 0;font-size:15px;line-height:1.55}
+.rule .ico{font-size:24px;flex:none}
+.hud{display:flex;justify-content:space-between;align-items:center;margin:6px 2px 12px;font-size:14px;color:#8A7A66}
+.hud .shelf{font-size:20px;letter-spacing:4px}
+.bubble{position:relative;background:#fff;border:2px solid #EAD9BE;border-radius:16px;padding:12px 16px;font-size:16px;line-height:1.6;margin:8px 0 12px;min-height:56px}
+.bubble:before{content:"";position:absolute;top:-10px;left:28px;width:16px;height:16px;background:#fff;border-left:2px solid #EAD9BE;border-top:2px solid #EAD9BE;transform:rotate(45deg)}
+.bubble .who{font-size:12px;font-weight:700;margin-bottom:2px}
+.bubble.go .who{color:#E8703A}
+.bubble.cmd{background:#3F7A5A;border-color:#3F7A5A;color:#fff}
+.bubble.cmd:before{background:#3F7A5A;border-color:#3F7A5A}
+.bubble.cmd .who{color:#F4B942}
+.board-wrap{background:#fff;border:3px solid #B98A4E;border-radius:14px;padding:10px;margin:4px 0 12px}
+.board-wrap svg{display:block;width:100%;height:auto}
+.cand{cursor:pointer}
+.cand .ring{fill:rgba(232,112,58,.18);stroke:#E8703A;stroke-width:2;animation:pulse 1.2s infinite}
+.cand .lbl{font-size:16px;font-weight:700;fill:#E8703A}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+.cand.best .ring{fill:rgba(244,185,66,.35);stroke:#F4B942;stroke-width:3;animation:none}
+.cand.dim{opacity:.55}
+.rates{margin:2px 0 12px}
+.rate-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:14px;font-weight:700}
+.rate-row .rl{width:20px;color:#E8703A}
+.rate-row .bar-bg{flex:1;background:#F6EBD8;border-radius:999px;height:20px;overflow:hidden;border:1px solid #EAD9BE}
+.rate-row .bar{height:100%;background:#E8703A;border-radius:999px;width:0;transition:width .8s ease}
+.rate-row.top .bar{background:#3F7A5A}
+.rate-row .rv{width:46px;text-align:right;color:#8A7A66}
+#overlay{position:fixed;inset:0;background:rgba(51,38,26,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.ov-card{background:#FFF9EF;border-radius:22px;padding:26px 22px;max-width:420px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.ov-card .big{font-size:66px;line-height:1.2}
+.ov-card h2{font-size:24px;margin:8px 0 6px}
+.ov-card p{font-size:15px;color:#8A7A66;line-height:1.7;margin-bottom:16px}
+.cert{background:#fff;border:3px solid #E8703A;border-radius:20px;padding:26px 20px;text-align:center;margin-top:14px;position:relative}
+.cert:before{content:"";position:absolute;inset:7px;border:2px dashed #EAD9BE;border-radius:14px;pointer-events:none}
+.cert .crown{font-size:54px}
+.cert h2{font-size:23px;margin:8px 0 2px;color:#E8703A}
+.cert .cname{font-size:17px;font-weight:700;margin:4px 0 12px}
+.cert .stats{display:flex;justify-content:center;gap:14px;margin:12px 0}
+.cert .stat{background:#F6EBD8;border-radius:12px;padding:10px 16px;font-size:14px}
+.cert .stat b{display:block;font-size:22px;color:#3F7A5A}
+.cert .motto{font-size:14px;color:#8A7A66;line-height:1.7;margin:10px 0 16px}
+.cert .badges{font-size:34px;letter-spacing:8px;margin:6px 0}
+.footer{text-align:center;font-size:12px;color:#B7A98F;margin-top:22px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section id="scr-start">
+    <div class="kicker">和孩子一起学AI · AI十哲 第六课</div>
+    <h1>胜率指挥官<br>帮 AlphaGo 想下一步</h1>
+    <div class="sub">不背棋谱、不靠运气——<br>每一步都算「赢面有多大」！</div>
+    <div class="hero">
+      <div class="gal">⚫⚪</div>
+      <div class="sub" style="color:#33261A;font-weight:700">棋盘上有三个候选点<br>只有一个藏着最高胜率</div>
+    </div>
+    <div class="rule"><div class="ico">👀</div><div><b>看局面</b>：黑白棋子摆好了，轮到 AlphaGo 落子</div></div>
+    <div class="rule"><div class="ico">👉</div><div><b>选一点</b>：A、B、C 三个候选点，点你觉得赢面最大的</div></div>
+    <div class="rule"><div class="ico">📊</div><div><b>看胜率</b>：AlphaGo 公布每个点的胜率——看你选得准不准</div></div>
+    <div style="height:14px"></div>
+    <button class="btn btn-orange" id="btn-start">坐上指挥官席位 🪖</button>
+  </section>
+
+  <section id="scr-game" class="hidden">
+    <div class="hud">
+      <span id="hud-level">第一关 · 直觉陷阱</span>
+      <span class="shelf" id="hud-shelf"></span>
+    </div>
+    <div class="bubble go"><div class="who">🤖 AlphaGo</div><div id="bub-go"></div></div>
+    <div class="board-wrap" id="board-wrap"></div>
+    <div class="rates hidden" id="rates"></div>
+    <div class="bubble cmd"><div class="who">🪖 指挥官（就是你）</div><div id="bub-cmd"></div></div>
+    <div style="height:8px"></div>
+    <button class="btn btn-green hidden" id="btn-next">下一手 →</button>
+  </section>
+
+  <section id="scr-cert" class="hidden">
+    <div class="cert">
+      <div class="crown">🏆</div>
+      <h2>AlphaGo 金牌指挥官证书</h2>
+      <div class="cname">授予：会算赢面的小指挥官</div>
+      <div class="badges" id="cert-badges"></div>
+      <div class="stats">
+        <div class="stat"><b id="st-best">0</b>妙手命中</div>
+        <div class="stat"><b id="st-miss">0</b>看走眼次数</div>
+      </div>
+      <div class="motto">不选最喜欢的，选赢面最大的——<br>每一步都重新想一遍，每一盘输赢都变成经验。<br>这就是 AlphaGo 赢下世界冠军的秘密！</div>
+      <button class="btn btn-orange" id="btn-restart">再玩一次 🔁</button>
+    </div>
+    <div class="footer">截图发到群里，找老师领纸质奖状哦 🏅</div>
+  </section>
+
+</div>
+
+<div id="overlay" class="hidden"><div class="ov-card" id="ov-card"></div></div>
+
+<script>
+(function(){
+"use strict";
+var AUTOTEST = location.search.indexOf('autotest') >= 0;
+var $ = function(id){ return document.getElementById(id); };
+
+/* ================= 数据 ================= */
+/* 棋盘 7x7，坐标 0-6；stones: [x,y,'b'|'w']；cands: {x,y,rate} */
+var LEVELS = [
+  {
+    name:'第一关 · 直觉陷阱',
+    badge:{icon:'⚫', name:'初段棋手'},
+    intro:{icon:'⚫', title:'第一关 · 直觉陷阱', text:'看起来最爽的走法，往往赢面最小。别被眼前的「吃子」骗了！'},
+    rounds:[
+      {stones:[[2,2,'b'],[3,2,'w'],[4,4,'w'],[2,4,'b']],
+       go:'白棋刚才在我旁边挑衅——要不要立刻吃掉它？',
+       cands:[{x:3,y:1,rate:35},{x:3,y:3,rate:58},{x:1,y:5,rate:41}],
+       why:'吃一颗子很爽，但棋盘中心能控制全盘——赢面最大的不是最爽的那步！'},
+      {stones:[[4,1,'w'],[2,3,'b'],[5,4,'w'],[3,5,'b']],
+       go:'这一局，右下角好像有便宜可捡？',
+       cands:[{x:2,y:4,rate:56},{x:5,y:2,rate:38},{x:4,y:3,rate:47}],
+       why:'右下角的「便宜」是个陷阱——左边的厚势才是安安静静的好棋。'},
+      {stones:[[1,1,'b'],[5,1,'w'],[3,3,'w'],[5,5,'b']],
+       go:'对手在边上围了一小块地，要不要去抢？',
+       cands:[{x:5,y:3,rate:44},{x:1,y:4,rate:39},{x:3,y:2,rate:57}],
+       why:'边角的小地盘不值钱，中腹的要点才是兵家必争之地。'}
+    ]
+  },
+  {
+    name:'第二关 · 算深一步',
+    badge:{icon:'⚪', name:'连胜棋手'},
+    intro:{icon:'⚪', title:'第二关 · 算深一步', text:'三个候选点越来越像——赢面只差几个百分点，指挥官，细品！'},
+    rounds:[
+      {stones:[[2,1,'b'],[4,2,'w'],[1,4,'w'],[4,5,'b'],[5,3,'b']],
+       go:'这一手，三个点看起来都差不多……',
+       cands:[{x:2,y:3,rate:48},{x:4,y:4,rate:55},{x:5,y:1,rate:50}],
+       why:'差之毫厘：中间这步悄悄连起了两块棋——厚势就是赢面。'},
+      {stones:[[3,0,'w'],[3,2,'b'],[0,3,'b'],[6,3,'w'],[3,6,'b']],
+       go:'棋盘四个方向都有战场，先管哪边？',
+       cands:[{x:1,y:2,rate:53},{x:5,y:5,rate:47},{x:3,y:4,rate:57}],
+       why:'中间这步看起来不声不响，却同时照应了上下两块——一石二鸟。'},
+      {stones:[[1,5,'b'],[2,2,'w'],[5,2,'b'],[4,4,'w'],[0,1,'w']],
+       go:'左边这颗孤子，要不要马上去救？',
+       cands:[{x:1,y:3,rate:56},{x:4,y:1,rate:50},{x:5,y:5,rate:45}],
+       why:'救孤子不如先抢大场——AlphaGo 从不感情用事，只看赢面。'}
+    ]
+  },
+  {
+    name:'第三关 · 神之一手',
+    badge:{icon:'🏆', name:'传奇指挥官'},
+    intro:{icon:'🏆', title:'第三关 · 神之一手', text:'致敬第 37 手：最不起眼的角落，藏着最高的赢面。你敢选它吗？'},
+    rounds:[
+      {stones:[[3,3,'b'],[2,3,'w'],[4,3,'w'],[3,2,'b']],
+       go:'所有人都觉得我会在中间应战——你怎么看？',
+       cands:[{x:1,y:5,rate:62},{x:3,y:4,rate:51},{x:4,y:2,rate:44}],
+       why:'左下角那个「没人看的角落」，十年后回头看才是胜负手！'},
+      {stones:[[2,2,'b'],[4,4,'w'],[2,4,'w'],[5,1,'b'],[0,5,'w']],
+       go:'大家都盯着左上角的战斗……',
+       cands:[{x:1,y:1,rate:49},{x:3,y:3,rate:52},{x:5,y:5,rate:61}],
+       why:'右下角的「闲棋」最像第 37 手——现在没用，十步之后封喉。'},
+      {stones:[[3,1,'w'],[1,3,'b'],[5,3,'w'],[3,5,'b'],[2,0,'b']],
+       go:'最后一手！下出你的「第 37 手」吧！',
+       cands:[{x:2,y:2,rate:47},{x:5,y:4,rate:63},{x:3,y:3,rate:52}],
+       why:'肩冲！人类万分之一的走法——你找到了它，传奇指挥官！'}
+    ]
+  }
+];
+
+/* ================= 状态 ================= */
+function freshState(){
+  return {scr:'start', level:0, round:0, phase:'idle', best:0,
+          picked:-1, hits:0, mistakes:0, badges:[], done:false, overlay:false};
+}
+var S = freshState();
+
+/* ================= 棋盘 SVG ================= */
+var M = 30, STEP = 50, SIZE = 360;
+function pt(i){ return M + i*STEP; }
+
+function boardSVG(L, R, reveal){
+  var s = '<svg viewBox="0 0 '+SIZE+' '+SIZE+'">';
+  s += '<rect width="'+SIZE+'" height="'+SIZE+'" rx="6" fill="#E9C07A"/>';
+  for(var i=0;i<7;i++){
+    s += '<line x1="'+pt(0)+'" y1="'+pt(i)+'" x2="'+pt(6)+'" y2="'+pt(i)+'" stroke="#8A6A3B" stroke-width="2"/>';
+    s += '<line x1="'+pt(i)+'" y1="'+pt(0)+'" x2="'+pt(i)+'" y2="'+pt(6)+'" stroke="#8A6A3B" stroke-width="2"/>';
+  }
+  var stars=[[1,1],[1,5],[5,1],[5,5],[3,3]];
+  for(var j=0;j<stars.length;j++){
+    s += '<circle cx="'+pt(stars[j][0])+'" cy="'+pt(stars[j][1])+'" r="4" fill="#8A6A3B"/>';
+  }
+  for(var k=0;k<R.stones.length;k++){
+    var st=R.stones[k], cx=pt(st[0]), cy=pt(st[1]);
+    if(st[2]==='b'){
+      s += '<circle cx="'+cx+'" cy="'+cy+'" r="19" fill="#33261A" stroke="#1c130a" stroke-width="1.5"/>';
+      s += '<circle cx="'+(cx-6)+'" cy="'+(cy-7)+'" r="5" fill="#5C4A36" opacity="0.8"/>';
+    }else{
+      s += '<circle cx="'+cx+'" cy="'+cy+'" r="19" fill="#FFF9EF" stroke="#B7A98F" stroke-width="1.5"/>';
+      s += '<circle cx="'+(cx-6)+'" cy="'+(cy-7)+'" r="5" fill="#ffffff"/>';
+    }
+  }
+  var letters=['A','B','C'];
+  for(var c=0;c<R.cands.length;c++){
+    var cd=R.cands[c], x=pt(cd.x), y=pt(cd.y);
+    var cls='cand';
+    if(reveal){ cls += (c===S.best) ? ' best' : ' dim'; }
+    s += '<g class="'+cls+'" id="cand'+c+'">';
+    s += '<circle cx="'+x+'" cy="'+y+'" r="26" fill="rgba(0,0,0,0)"/>';
+    s += '<circle class="ring" cx="'+x+'" cy="'+y+'" r="17"/>';
+    s += '<text class="lbl" x="'+x+'" y="'+(y+6)+'" text-anchor="middle">'+letters[c]+'</text>';
+    s += '</g>';
+  }
+  s += '</svg>';
+  return s;
+}
+
+/* ================= 工具 ================= */
+var timers = [];
+function later(fn, ms){ var t = setTimeout(fn, AUTOTEST ? 20 : ms); timers.push(t); }
+function typeBubble(el, text){
+  el.textContent = '';
+  if(AUTOTEST){ el.textContent = text; return; }
+  var i = 0;
+  var iv = setInterval(function(){
+    i++;
+    el.textContent = text.slice(0, i);
+    if(i >= text.length){ clearInterval(iv); }
+  }, 28);
+  timers.push(iv);
+}
+
+function showScr(name){
+  S.scr = name;
+  $('scr-start').classList.toggle('hidden', name!=='start');
+  $('scr-game').classList.toggle('hidden', name!=='game');
+  $('scr-cert').classList.toggle('hidden', name!=='cert');
+}
+function showOverlay(html){ $('ov-card').innerHTML = html; $('overlay').classList.remove('hidden'); S.overlay = true; }
+function hideOverlay(){ $('overlay').classList.add('hidden'); S.overlay = false; }
+
+/* ================= 流程 ================= */
+function startGame(){
+  S = freshState();
+  showScr('game');
+  levelIntro();
+}
+
+function levelIntro(){
+  var L = LEVELS[S.level];
+  showOverlay(
+    '<div class="big">'+L.intro.icon+'</div>'+
+    '<h2>'+L.intro.title+'</h2>'+
+    '<p>'+L.intro.text+'</p>'+
+    '<button class="btn btn-orange" id="btn-enter">开始指挥 →</button>'
+  );
+  $('btn-enter').addEventListener('click', function(){
+    if($('overlay').classList.contains('hidden')) return;
+    hideOverlay();
+    S.round = 0;
+    dealRound();
+  });
+}
+
+function dealRound(){
+  var L = LEVELS[S.level];
+  var R = L.rounds[S.round];
+  S.phase = 'pick';
+  S.picked = -1;
+  var best = 0;
+  for(var i=1;i<R.cands.length;i++){ if(R.cands[i].rate > R.cands[best].rate) best = i; }
+  S.best = best;
+
+  $('hud-level').textContent = L.name + ' · 第 ' + (S.round+1) + '/' + L.rounds.length + ' 手';
+  renderShelf();
+  $('btn-next').classList.add('hidden');
+  $('rates').classList.add('hidden');
+  $('rates').innerHTML = '';
+
+  $('board-wrap').innerHTML = boardSVG(L, R, false);
+  for(var c=0;c<R.cands.length;c++){
+    (function(idx){ $('cand'+idx).addEventListener('click', function(){ pickCand(idx); }); })(c);
+  }
+
+  typeBubble($('bub-go'), R.go);
+  typeBubble($('bub-cmd'), '三个候选点，哪个赢面最大？点它！');
+}
+
+function pickCand(i){
+  if(S.phase !== 'pick' || S.overlay) return;
+  S.phase = 'reveal';
+  S.picked = i;
+  var L = LEVELS[S.level];
+  var R = L.rounds[S.round];
+  var letters = ['A','B','C'];
+
+  $('board-wrap').innerHTML = boardSVG(L, R, true);
+
+  var html = '';
+  var max = 0;
+  for(var m=0;m<R.cands.length;m++){ if(R.cands[m].rate>max) max=R.cands[m].rate; }
+  for(var c=0;c<R.cands.length;c++){
+    var top = (R.cands[c].rate===max) ? ' top' : '';
+    html += '<div class="rate-row'+top+'"><span class="rl">'+letters[c]+'</span>'+
+            '<div class="bar-bg"><div class="bar" id="bar'+c+'"></div></div>'+
+            '<span class="rv">'+R.cands[c].rate+'%</span></div>';
+  }
+  $('rates').innerHTML = html;
+  $('rates').classList.remove('hidden');
+  later(function(){
+    for(var b=0;b<R.cands.length;b++){ $('bar'+b).style.width = R.cands[b].rate + '%'; }
+  }, 60);
+
+  if(i === S.best){
+    S.hits++;
+    typeBubble($('bub-cmd'), '我选 ' + letters[i] + '！');
+    typeBubble($('bub-go'), '英雄所见略同！' + R.why);
+  }else{
+    S.mistakes++;
+    typeBubble($('bub-cmd'), '我选 ' + letters[i] + '……呀？');
+    typeBubble($('bub-go'), '这步也不错（' + R.cands[i].rate + '%），但 ' + letters[S.best] + ' 点赢面更大（' + R.cands[S.best].rate + '%）——' + R.why);
+  }
+  later(function(){ $('btn-next').classList.remove('hidden'); }, 900);
+}
+
+function nextRound(){
+  if(S.phase !== 'reveal') return;
+  var L = LEVELS[S.level];
+  S.round++;
+  if(S.round < L.rounds.length){
+    dealRound();
+  }else{
+    awardBadge();
+  }
+}
+
+function awardBadge(){
+  var L = LEVELS[S.level];
+  S.phase = 'badge';
+  S.badges.push(L.badge.icon);
+  renderShelf();
+  showOverlay(
+    '<div class="big">'+L.badge.icon+'</div>'+
+    '<h2>恭喜获得「'+L.badge.name+'」徽章！</h2>'+
+    '<p>不选最喜欢的，选赢面最大的——<br>你的判断力又上了一个台阶！</p>'+
+    '<button class="btn btn-green" id="btn-continue">'+(S.level < LEVELS.length-1 ? '进入下一关 →' : '领取证书 🏆')+'</button>'
+  );
+  $('btn-continue').addEventListener('click', function(){
+    if($('overlay').classList.contains('hidden')) return;
+    hideOverlay();
+    if(S.level < LEVELS.length-1){
+      S.level++;
+      levelIntro();
+    }else{
+      showCert();
+    }
+  });
+}
+
+function renderShelf(){ $('hud-shelf').textContent = S.badges.join(' '); }
+
+function showCert(){
+  S.done = true;
+  $('cert-badges').textContent = S.badges.join(' ');
+  $('st-best').textContent = S.hits;
+  $('st-miss').textContent = S.mistakes;
+  showScr('cert');
+}
+
+function resetAll(){
+  for(var i=0;i<timers.length;i++){ clearTimeout(timers[i]); clearInterval(timers[i]); }
+  timers = [];
+  S = freshState();
+  hideOverlay();
+  showScr('start');
+}
+function softRestart(){
+  try{ location.reload(); }catch(e){}
+  setTimeout(resetAll, 400);
+}
+
+/* ================= 绑定 ================= */
+$('btn-start').addEventListener('click', startGame);
+$('btn-next').addEventListener('click', nextRound);
+$('btn-restart').addEventListener('click', softRestart);
+
+/* ================= 调试接口 ================= */
+window.__DBG = {
+  state: function(){
+    return {scr:S.scr, level:S.level, round:S.round, phase:S.phase, best:S.best,
+            picked:S.picked, hits:S.hits, mistakes:S.mistakes,
+            badges:S.badges.slice(), done:S.done, overlay:S.overlay};
+  }
+};
+})();
+</script>
+</body>
+</html>
